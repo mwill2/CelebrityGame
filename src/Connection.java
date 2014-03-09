@@ -1,0 +1,427 @@
+import java.io.*;
+import java.net.*;
+import java.util.ArrayList;
+
+public class Connection implements Runnable {
+	private Socket socket;
+	private BufferedReader inFromClient;
+	private PrintWriter outToClient;
+	private CelebrityNode current;
+	private String clientAnswer;
+	private String clientUserId;
+	private boolean guess;
+	private boolean play;
+	public static BinaryCelebrityTree tree;
+	private ArrayList<CelebrityNode> userCreated = new ArrayList<>();
+
+	static {
+//		tree = new BinaryCelebrityTree();
+		tree = new BinaryCelebrityTree("file.txt");
+	}
+
+	public Connection(Socket socketIn) throws IOException {
+		setSocket(socketIn);
+		startToPlay();
+	}
+
+	private void setClientAnswer(String clientAnswerIn) {
+		clientAnswer = clientAnswerIn;
+	}
+
+	private void initializeSocket(Socket socketIn) throws IOException {
+		inFromClient = new BufferedReader(new InputStreamReader(
+				socket.getInputStream()));
+		outToClient = new PrintWriter(socket.getOutputStream());
+	}
+
+	private void setSocket(Socket socketIn) throws IOException {
+		socket = socketIn;
+		initializeSocket(socketIn);
+	}
+
+	private Socket getSocket() {
+		return socket;
+	}
+
+	public void startToPlay() {
+		play = true;
+	}
+
+	public void stopPlaying() {
+		play = false;
+	}
+
+	private void setCurrent(CelebrityNode currentIn)
+			throws InterruptedException {
+		System.out.println("setCurrent(currentIn) = " + currentIn.getValue());
+		if (currentIn.isInUse() == true && currentIn.getRight() == null) {
+			outToClient.println("Let Me think...");
+			outToClient.flush();
+			while (currentIn.isInUse() == true) {
+				Thread.sleep(20);
+			}
+		}
+		System.out.println("node was unlocked successfully");
+		currentIn.setIsInUse(true);
+		current = currentIn;
+	}
+
+	private CelebrityNode getCurrent() {
+		return this.current;
+	}
+
+	private void printToClient(String message) {
+		outToClient.println(message);
+	}
+
+	private void flushClient() {
+		outToClient.flush();
+	}
+
+	private void log(String message) {
+		System.out.println(message);
+	}
+
+	private boolean isAnswerYes() {
+		return clientAnswer.equals("yes") || clientAnswer.equals('y');
+	}
+
+	private boolean isAnswerNo() {
+		return clientAnswer.equals("no") || clientAnswer.equals('n');
+	}
+
+	private boolean shouldKeepPlayingTheGame() {
+		return play == true;
+	}
+
+	private void askToPlayTheGame() throws IOException {
+		printToClient("\nWould you like to play the Celebrity Game?");
+		readAnswerFromClient();
+	}
+
+	private void askForPlayerName() throws IOException {
+		printToClient("What is your name?");
+		readUserIdFromClient();
+	}
+
+	private void readAnswerFromClient() throws IOException {
+		flushClient();
+		clientAnswer = inFromClient.readLine();
+	}
+
+	private void readUserIdFromClient() throws IOException {
+		flushClient();
+		clientUserId = inFromClient.readLine();
+	}
+
+	private boolean getGuess() {
+		return guess;
+	}
+
+	private void setGuess(boolean guessIn) {
+		guess = guessIn;
+	}
+
+	private void logStartedPlaying() {
+		log(clientUserId + " is playing on one thread");
+	}
+
+	private void askQuestion() throws IOException {
+		printQuestion();
+		readAnswerFromClient();
+	}
+
+	private boolean hasNoMoreCelebritiesToGuess() {
+		return getCurrent().getLeft() == null;
+	}
+
+	private String generateAreYouThinkingOfQuestion(String celebName) {
+		return "Are you thinking of " + celebName + "?";
+	}
+
+	private String generateCurrentValueAreYouThinkingOfQuestion() {
+		return generateAreYouThinkingOfQuestion(getCurrent().getValue());
+	}
+
+	private void printQuestion() {
+		if (hasNoMoreCelebritiesToGuess())
+			printToClient(generateCurrentValueAreYouThinkingOfQuestion());
+		else
+			printToClient(getCurrent().getValue());
+	}
+
+	private boolean hasNotFinishedGuessing() {
+		return !getGuess();
+	}
+
+	private void finishGuessing() {
+		setGuess(true);
+	}
+
+	private void beginGuessing() {
+		setGuess(false);
+	}
+
+	private String getClientAnswer() {
+		return clientAnswer;
+	}
+
+	private String getClientUserId() {
+		return clientUserId;
+	}
+
+	private void logSomeoneRespondedToQuestion() {
+		log(getClientUserId() + " responded: " + getClientAnswer()
+				+ " to question: " + getCurrent().getValue() + "\nFrom: "
+				+ getSocket().getRemoteSocketAddress());
+	}
+
+	private void printSuccessMessage() {
+		printToClient("Yes!! I'm pretty smart!");
+	}
+
+	private void askWhatCelebrityTheyWereThinkingOf() throws IOException {
+		printToClient("What Celebrity are you thinking of?");
+		flushClient();
+		setClientAnswer(inFromClient.readLine());
+	}
+
+	private CelebrityNode createCelebrityNode(String celebrityTextIn) {
+		return new CelebrityNode(celebrityTextIn);
+	}
+
+	private CelebrityNode createReplacementCelebrityNode(String celebrityTextIn) {
+		return createCelebrityNode(celebrityTextIn);
+	}
+
+	private void askForDistinguishQuestion() throws IOException {
+		printToClient("Please give me a yes/no question to distinguish "
+				+ getClientAnswer() + " from " + getCurrent().getValue());
+		readAnswerFromClient();
+	}
+
+	private CelebrityNode copyCurrentNode() {
+		return new CelebrityNode(getCurrent().getValue());
+	}
+
+	private void handleYes() {
+		if (getCurrent().getLeft() == null) {
+			getCurrent().setSomeoneGuessed(true);
+			getCurrent().setGuessedById(getClientUserId());
+			printSuccessMessage();
+			logSomeoneRespondedToQuestion();
+			getCurrent().setIsInUse(false);
+			finishGuessing();
+		} else if (getCurrent().getLeft() != null) {
+			getCurrent().setIsInUse(false);
+			try {
+				setCurrent(getCurrent().getLeft());
+			} catch (InterruptedException e) {
+			}
+		}
+	}
+
+	private void handleNo() throws IOException, InterruptedException {
+		if (getCurrent().getRight() == null) {
+			CelebrityNode replacementCelebrityNode = null;
+			String distinguishQuestionText = null;
+			CelebrityNode copyOfCurrentNode = null;
+			String replacementCeleb = null;
+			try {
+				socket.setSoTimeout(20000);
+				askWhatCelebrityTheyWereThinkingOf();
+				replacementCeleb = getClientAnswer();
+				askForDistinguishQuestion();
+				distinguishQuestionText = getClientAnswer();
+				askWhichChild(replacementCeleb);
+			} catch (InterruptedIOException iioe) {
+				getCurrent().setIsInUse(false);
+				outToClient.println("I do not have time to wait for you... You must start over.");
+				resetSocketTimeout();
+				finishGuessing();
+				return;
+			}
+			if (isAnswerYes()) {
+				synchronized (this) {
+					copyOfCurrentNode = copyCurrentNode();
+					replacementCelebrityNode = createReplacementCelebrityNode(replacementCeleb);
+					getCurrent().setRight(copyOfCurrentNode);
+					getCurrent().setValue(distinguishQuestionText);
+					getCurrent().setLeft(replacementCelebrityNode);
+					userCreated.add(getCurrent().getLeft());
+					writeNodesToFile(getCurrent());
+				}
+			} else {
+				synchronized (this) {
+					copyOfCurrentNode = copyCurrentNode();
+					replacementCelebrityNode = createReplacementCelebrityNode(replacementCeleb);
+					getCurrent().setLeft(copyOfCurrentNode);
+					getCurrent().setValue(distinguishQuestionText);
+					getCurrent().setRight(replacementCelebrityNode);
+					userCreated.add(getCurrent().getRight());
+					writeNodesToFile(getCurrent());
+				}
+			}
+			resetSocketTimeout();
+			getCurrent().setIsInUse(false);
+			finishGuessing();
+		} else {
+			resetSocketTimeout();
+			getCurrent().setIsInUse(false);
+			setCurrent(getCurrent().getRight());
+		}
+	}
+
+	private synchronized void writeNodesToFile(CelebrityNode c) throws IOException {
+		tree.writeToFile(
+				c.getNodeIdLocation(), 
+				c.getId(), 
+				c.getLeft().getId(), 
+				c.getRight().getId(), 
+				c.getValue());
+		tree.writeToFile(
+				c.getLeft().getNodeIdLocation(), 
+				c.getLeft().getId(), 
+				-1, 
+				-1, 
+				c.getLeft().getValue());
+		tree.writeToFile(
+				c.getRight().getNodeIdLocation(), 
+				c.getRight().getId(), 
+				-1, 
+				-1, 
+				c.getRight().getValue());
+		
+	}
+
+	private void resetSocketTimeout() throws SocketException {
+		socket.setSoTimeout(0);
+	}
+
+	private void askWhichChild(String cn) throws IOException {
+		printToClient("If someone answers yes, would that be " + cn
+				+ "?");
+		readAnswerFromClient();
+	}
+
+	private void resetCurrentToRoot() throws InterruptedException {
+		setCurrent(tree.getRootNode());
+		getCurrent().setIsInUse(true);
+	}
+
+	private void handleAnswerToQuestion() throws IOException,
+			InterruptedException {
+		if (isAnswerYes()) {
+			handleYes();
+		} else if (isAnswerNo()) {
+			handleNo();
+		}
+	}
+
+	private void stopPlayingIfAnswerIsNo() {
+		if (isAnswerNo()) {
+			checkIfAnyoneUsedYourNode();
+			stopPlaying();
+		} else {
+			thinkOfCelebrity();
+		}
+		
+	}
+
+	private void setupGame() throws IOException {
+		askForPlayerName();
+		logStartedPlaying();
+		thinkOfCelebrity();
+	}
+
+	private void thinkOfCelebrity() {
+		printToClient("\nThink of a Celebrity.");
+		flushClient();
+		try {
+			Thread.sleep(1000);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+
+	private void playGame() throws IOException, InterruptedException {
+		setupGame();
+		while (shouldKeepPlayingTheGame()) {
+			beginGuessing();
+			resetCurrentToRoot();
+			while (hasNotFinishedGuessing()) {
+				checkIfAnyoneUsedYourNode();
+				askQuestion();
+				handleAnswerToQuestion();
+			}
+
+			askToPlayTheGame();
+			resetCurrentToRoot();
+			getCurrent().setIsInUse(false);
+			stopPlayingIfAnswerIsNo();	
+		}
+	}
+
+	private void checkIfAnyoneUsedYourNode() {
+		for (CelebrityNode n : userCreated) {
+			if (n.isSomeoneGuessed() == true) {
+				printToClient("***********" + n.getGuessedById()
+						+ " also guessed " + n.getValue() + "***********");
+				flushClient();
+				n.setGuessedById(null);
+				n.setSomeoneGuessed(false);
+			}
+		}
+	}
+
+	public void run() {
+		try {
+			askToPlayTheGame();
+			if (isAnswerYes())
+				try {
+					playGame();
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+		} catch (IOException e) {
+			handleIOException(e);
+		} finally {
+			handleFinally();
+		}
+	}
+
+	private void handleFinally() {
+		try {
+			printToClient("Game Over");
+			closeSocketIfOpen();
+		} catch (IOException e) {
+			System.err.println(e);
+		}
+	}
+
+	private void closeSocketIfOpen() throws IOException {
+		if (socketNotOpen()) {
+			printTree();
+			closeSocket();
+		}
+	}
+
+	private boolean socketNotOpen() {
+		return getSocket() != null;
+	}
+
+	private void closeSocket() throws IOException {
+		getSocket().close();
+	}
+
+	private void printTree() {
+		tree.printInOrder(tree.getRootNode());
+	}
+
+	private void handleIOException(IOException e) {
+		System.err.println(e);
+		e.printStackTrace();
+	}
+}

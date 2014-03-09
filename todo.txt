@@ -1,0 +1,56 @@
+parent? for binary celebrity tree class?
+
+String[] nodesParts = "0|-1|-1|hahaha           a really long aqss string here... asdf asd f sadf asd f  asdf asd fasd fsda fasdfasd fasdfa sfasfd|".split("|");
+int nodeId = String.parseInt(nodesParts[0]);
+int leftNodeId = String.parseInt(nodesParts[1]);
+int rightNodeId = String.parseInt(nodesParts[2]);
+String nodeValue = nodesParts[3];
+
+
+
+- do we need to do long for the bufffer? becauseit can get pretty big eventually and int wont suffice
+
+
+999999   -1    -1Hello world asdf asd f asdfasdfasdfasdfasfa
+seek(location+0)
+int nodeId = read(4)
+seek(location+4)
+int leftNodeId = read(4)
+seek(location+8)
+int leftNodeId = read(8)
+seek(location+12)
+String nodeValue = read(188)
+
+200 total.. - 12 = 188
+
+
+- change the "|" + .. because we are not using that strategy anymore (BinCelebTree)
+
+
+pass null into constructor ? celeb class.
+
+- recurse when creating left and right node somehow, 
+we will need to set the created node as the right/left node of the current node.
+
+
+-when the value is over 388, wee need to figure out what to do to prevent it from writing further.
+
+
+
+
+    
+//    private CelebrityNode findNode(int nodeId) {
+//    	
+//    	
+//    	
+//    	seek(location+0)
+//    	int nodeId = read(4)
+//    	seek(location+4)
+//    	int leftNodeId = read(4)
+//    	seek(location+8)
+//    	int leftNodeId = read(8)
+//    	seek(location+12)
+//    	String nodeValue = read(188)
+//    	
+//    	nodeId
+//    }
